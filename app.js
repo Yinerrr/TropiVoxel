@@ -42416,6 +42416,26 @@ void main() {
         const w = b.width / BLOCK_METERS, d = b.depth / BLOCK_METERS, h = b.height / BLOCK_METERS, voidDeck = b.porosity > 0;
         const selected = b.id === props.selectedId, context = b.editable === false;
         const color = selected ? "#91bfa7" : context ? "#d6d7cf" : ["#e7d3c9", "#d8c6cb", "#e9decc"][index % 3], offset = voidDeck ? LEVEL : 0;
+        if (selected && props.microAnalysis) {
+          const analysis = props.microAnalysis, f = analysis.floors[props.microLevel - 1];
+          const points = b.footprint ?? [[-b.width / 2, -b.depth / 2], [b.width / 2, -b.depth / 2], [b.width / 2, b.depth / 2], [-b.width / 2, b.depth / 2]];
+          const shell = (height, base, opacity) => {
+            if (height <= 0) return;
+            const shape = new Shape(points.map(p => new Vector2(p[0] / BLOCK_METERS, -p[1] / BLOCK_METERS)));
+            const geo = new ExtrudeGeometry(shape, { depth: height / BLOCK_METERS, bevelEnabled: false }); geo.rotateX(-Math.PI / 2);
+            const mesh = new Mesh(geo, new MeshStandardMaterial({ color, transparent: true, opacity, depthWrite: false }));
+            mesh.position.y = base / BLOCK_METERS + 0.04; mesh.userData.building = b; node.add(mesh); pickables.current.push(mesh);
+            const edge = new LineSegments(new EdgesGeometry(geo), new LineBasicMaterial({ color: 4486237, transparent: true, opacity: 0.5 })); edge.position.copy(mesh.position); node.add(edge);
+          };
+          const base = (f.level - 1) * analysis.floorHeight;
+          shell(base, 0, 0.18);
+          shell(b.height - f.elevation, f.elevation + 12, 0.18);
+          f.samples.forEach(v => {
+            const tile = box(node, analysis.dx / BLOCK_METERS * 0.94, 0.09, analysis.dz / BLOCK_METERS * 0.94, TropiMicroclimate.color(props.microMetric, v[props.microMetric]), v.u / BLOCK_METERS, base / BLOCK_METERS + 0.08, v.v / BLOCK_METERS, { building: b });
+            tile.castShadow = false;
+          });
+          return;
+        }
         if (b.footprint) {
           const shape = new Shape(b.footprint.map((p) => new Vector2(p[0] / BLOCK_METERS, -p[1] / BLOCK_METERS)));
           const geometry = new ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
@@ -42455,7 +42475,7 @@ void main() {
         }
         box(node, w + 0.04, 0.075, d + 0.04, selected ? "#bad5b9" : "#f2e8dc", 0, h + 0.07, 0, { building: b });
       });
-    }, [props.blocks, props.buildings, props.selectedId, props.showContext, props.context]);
+    }, [props.blocks, props.buildings, props.selectedId, props.showContext, props.context, props.microAnalysis, props.microLevel, props.microMetric]);
     reactExports.useEffect(() => {
       const group = landGroup.current;
       if (!group) return;
@@ -42703,6 +42723,42 @@ void main() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
+  function FloorMicroclimate({ analysis, level, onLevel, metric, onMetric, options, onOptions, slice, onSlice, building, environment }) {
+    const [room, setRoom] = reactExports.useState(null);
+    reactExports.useEffect(() => setRoom(null), [level, analysis]);
+    const h = reactExports.createElement, floor = analysis.floors[level - 1];
+    if (!floor) return h('p', null, 'No floor samples available.');
+    const sample = floor.samples.find(v => `${v.i},${v.j}` === room);
+    const value = sample || floor;
+    const number = (v, digits = 1) => v === null ? '—' : v.toFixed(digits);
+    const stat = (label, v, unit) => h('div', { key: label }, h('dt', null, label), h('dd', null, number(v), h('small', null, ' ' + unit)));
+    const exportCSV = () => {
+      const rows = [['Level', 'Elevation m', 'Open communal floor', 'Operative C', 'ACH', 'Flow m3/s', 'Indoor wind m/s', 'ETTV W/m2', 'Daylight %', 'Comfort score %', 'Ventilation target coverage %', 'Ambient C', 'Module m', 'Date SGT', 'Hour SGT']];
+      analysis.floors.forEach(f => rows.push([f.level, f.elevation, f.open, f.temperature, f.ach, f.q, f.wind, f.ettv, f.daylight, f.comfort, f.coverage, analysis.ambient, analysis.moduleSize, environment.date, environment.hour]));
+      const url = URL.createObjectURL(new Blob([rows.map(r => r.map(v => v === null ? '' : v).join(',')).join('\n')], { type: 'text/csv' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'tropivoxel-floor-analysis.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    return h('section', { className: 'floor-microclimate', 'aria-label': 'Per-floor microclimate analysis' },
+      h('span', { className: 'eyebrow' }, 'INTERIOR MICROCLIMATE'),
+      h('h2', null, 'Floor-by-floor analysis'),
+      h('p', { className: 'editor-note' }, 'Concept estimates · ' + number(analysis.ambient) + '°C ambient · ' + number(analysis.floorHeight, 2) + ' m per storey'),
+      h('label', null, 'Active floor', h('select', { value: level, onChange: e => onLevel(+e.target.value), 'aria-label': 'Active floor' }, analysis.floors.map(f => h('option', { key: f.level, value: f.level }, 'Level ' + f.level + (f.open ? ' · communal / open' : '') + ' · ' + number(f.elevation) + ' m')))),
+      h('label', null, 'Room-module size', h('select', { value: options.moduleSize, onChange: e => onOptions({ ...options, moduleSize: +e.target.value }) }, [2.4, 3, 3.6, 4.2, 4.8].map(v => h('option', { key: v, value: v }, v + ' m')))),
+      h('label', null, 'Sky garden scenario', h('select', { value: options.gardenLevel, onChange: e => onOptions({ ...options, gardenLevel: +e.target.value }) }, h('option', { value: 0 }, 'None'), analysis.floors.map(f => h('option', { key: f.level, value: f.level }, 'Level ' + f.level)))),
+      h('label', { className: 'micro-check' }, h('input', { type: 'checkbox', checked: options.diurnal, onChange: e => onOptions({ ...options, diurnal: e.target.checked }) }), 'Use specification diurnal temperature'),
+      h('label', { className: 'micro-check' }, h('input', { type: 'checkbox', checked: slice, onChange: e => onSlice(e.target.checked) }), 'See-through floor slice (+12 m)'),
+      h('label', null, 'Floor map', h('select', { value: metric, onChange: e => onMetric(e.target.value), 'aria-label': 'Floor map metric' }, [['temperature', 'Operative temperature · °C'], ['ach', 'Air changes · h⁻¹'], ['daylight', 'Daylight factor · %'], ['comfort', 'Adaptive comfort score · %']].map(([v, label]) => h('option', { key: v, value: v }, label)))),
+      h('p', { className: 'editor-note' }, 'Local floor axes · top is building north before rotation. Click a module to inspect.'),
+      h('div', { className: 'micro-floor-map', style: { gridTemplateColumns: `repeat(${analysis.nx}, minmax(0, 1fr))`, aspectRatio: `${analysis.nx * analysis.dx} / ${analysis.nz * analysis.dz}` } }, floor.samples.map(v => h('button', { key: `${v.i},${v.j}`, style: { gridColumn: v.i + 1, gridRow: v.j + 1, background: TropiMicroclimate.color(metric, v[metric]) }, className: room === `${v.i},${v.j}` ? 'active' : '', 'aria-label': `Module ${v.i + 1}, ${v.j + 1}: ${number(v[metric])}`, 'aria-pressed': room === `${v.i},${v.j}`, title: `${v.mode} · ${number(v[metric])}`, onClick: () => setRoom(room === `${v.i},${v.j}` ? null : `${v.i},${v.j}`) }))),
+      h('p', { className: 'editor-note micro-legend' }, metric === 'temperature' ? 'Green ≤27.5 · blue <29.5 · amber ≤31 · coral >31°C' : metric === 'ach' ? 'Amber <12 · blue 12–21 · green ≥21 ACH' : metric === 'daylight' ? 'Amber <1.6 · blue 1.6–2.8 · green ≥2.8%' : 'Amber <40 · blue 40–70 · green ≥70%'),
+      h('strong', null, sample ? `Module ${sample.i + 1}, ${sample.j + 1} · ${sample.mode}` : `Level ${level} · ${floor.samples.length} modules · floor means`),
+      h('dl', { className: 'micro-stats', 'aria-live': 'polite' }, stat('Operative temp.', value.temperature, '°C'), stat('Air changes', value.ach, 'h⁻¹'), stat('Indoor air speed', value.wind, 'm/s'), stat('Airflow Q', value.q, 'm³/s'), stat('Facade ETTV', value.ettv, 'W/m²'), stat('Daylight factor', value.daylight, '%'), stat('Comfort score', value.comfort, '%')),
+      h('p', { className: 'micro-target' }, floor.coverage === null ? 'Open communal floor · excluded from habitable-area screening.' : `${number(floor.coverage, 0)}% of sampled floor area meets v ≥0.60 m/s or ACH ≥15. ${floor.coverage >= 70 ? 'Meets' : 'Below'} specification’s 70% screening target.`),
+      h('details', null, h('summary', null, 'Compare all floors'), h('div', { className: 'micro-floor-list' }, [...analysis.floors].reverse().map(f => h('button', { key: f.level, className: f.level === level ? 'active' : '', onClick: () => onLevel(f.level) }, h('span', null, 'L' + f.level), h('span', { className: 'micro-bar', style: { background: TropiMicroclimate.color(metric, f[metric]), width: `${Math.max(8, Math.min(100, metric === 'temperature' ? (f.temperature - 20) * 6 : metric === 'ach' ? f.ach * 3 : metric === 'daylight' ? f.daylight * 20 : f.comfort))}%` } }), h('span', null, number(f[metric])))))),
+      h('button', { className: 'button subtle', onClick: exportCSV }, 'Export all floors · CSV'),
+      h('details', null, h('summary', null, 'Model assumptions'), h('p', { className: 'editor-note' }, 'Room modules are inferred from the massing, not actual apartments. Opposite exposed module faces permit cross ventilation; adjacent faces use the single-sided estimate. Interior modules have no assumed openings. Openings use 22% of module facade area. WWR 0.35, wall U 1.8, glass U 2.8, SC 0.45; wind exponent 0.22 at 10 m. Local apertures touching neighbouring buildings are closed. Remote wakes and solar obstruction are not resolved. Daylight is an overcast-sky factor, including at night. Sky gardens are a temporary scenario. The diurnal option follows the equation, whose minimum is at 02:30 SGT. Comfort uses the specification’s score and air-speed credits. This is a screening model, not CFD, a validated thermal simulation or Green Mark certification.'))
+    );
+  }
   function App() {
     var _a, _b;
     const [scene, setScene] = reactExports.useState(initialScene);
@@ -42722,6 +42778,8 @@ void main() {
     const [contextLoading, setContextLoading] = reactExports.useState(false), [contextError, setContextError] = reactExports.useState("");
     const [apiAvailable, setApiAvailable] = reactExports.useState(false);
     const selected = scene.buildings.find((b) => b.id === selectedId);
+    const [microOptions, setMicroOptions] = reactExports.useState({ moduleSize: 3.6, gardenLevel: 0, diurnal: false });
+    const [microLevel, setMicroLevel] = reactExports.useState(1), [microMetric, setMicroMetric] = reactExports.useState("temperature"), [microSlice, setMicroSlice] = reactExports.useState(false);
     const upload = reactExports.useRef(null);
     const matchingHour = weatherForTime((weather == null ? void 0 : weather.hours) ?? [], env.date, env.hour);
     const liveWeather = useGoogle && !!matchingHour;
@@ -42730,6 +42788,8 @@ void main() {
       var _a2;
       return simulateEnvironment(scene.blocks, effectiveEnv, [...scene.buildings, ...surroundingBuildings(scene)], (_a2 = scene.context) == null ? void 0 : _a2.landcover);
     }, [scene, effectiveEnv]);
+    const microAnalysis = reactExports.useMemo(() => selected ? TropiMicroclimate.analyse(selected, effectiveEnv, { ...microOptions, buildings: [...scene.buildings, ...surroundingBuildings(scene)] }, { contains: containsPoint, corners: footprintCorners, sun: sunPosition }) : null, [selected, effectiveEnv, microOptions, scene.buildings, scene.context]);
+    const activeMicroLevel = selected ? Math.min(microLevel, selected.storeys) : 1;
     const before = reactExports.useMemo(() => {
       var _a2;
       return baseline ? simulateEnvironment(baseline.blocks, effectiveEnv, [...baseline.buildings, ...surroundingBuildings(baseline)], (_a2 = baseline.context) == null ? void 0 : _a2.landcover) : null;
@@ -42752,6 +42812,10 @@ void main() {
       if (id && ((_a2 = scene.context) == null ? void 0 : _a2.buildings.some((b) => b.id === id && b.editable === false))) {
         setToast("Surrounding building · read-only context. Select a building inside the outlined design area.");
         return;
+      }
+      if (id !== selectedId) {
+        setMicroLevel(1);
+        setMicroOptions(options => ({ ...options, gardenLevel: 0 }));
       }
       setSelectedId(id);
       if (id) {
@@ -43089,6 +43153,7 @@ void main() {
               "Layout controls replace the editable design area and planting. Surrounding context stays fixed. Use Building for individual edits."
             ] })
           ] }),
+          sidebar === "building" && selected && microAnalysis && jsxRuntimeExports.jsx(FloorMicroclimate, { key: selected.id, analysis: microAnalysis, level: activeMicroLevel, onLevel: setMicroLevel, metric: microMetric, onMetric: setMicroMetric, options: microOptions, onOptions: setMicroOptions, slice: microSlice, onSlice: setMicroSlice, building: selected, environment: effectiveEnv }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sidebar-foot", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "status-dot live" }),
             saveFailed ? "Auto-save unavailable. Export to keep your scene." : "Scene saved locally",
@@ -43118,7 +43183,10 @@ void main() {
               draft,
               context: scene.context,
               showContext,
-              showLandscape
+              showLandscape,
+              microAnalysis: sidebar === "building" && microSlice ? microAnalysis : null,
+              microLevel: activeMicroLevel,
+              microMetric
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "layer-switch glass", "aria-label": "Analysis layers", children: layers.map(({ id, name, icon: Icon2 }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: layer === id ? "selected" : "", "aria-pressed": layer === id, onClick: () => setLayer(id), children: [

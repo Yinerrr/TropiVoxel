@@ -11,13 +11,14 @@ Help an urban designer compare neighbourhood massing and pedestrian microclimate
 | index.html | HTML entry point, document metadata, application root and script/style links. The running application renders the scene editor, building controls and result cards here. |
 | styles.css | CSS layout, colour, sizing, responsive states, selection and input styles. |
 | app.js | Bundled JavaScript: interactions, building selection and edits, context filters, object counts, Three.js rendering, climate calculations, local saves, import/export and the embedded Bishan sample. React and Three.js are included; no separate node_modules or JSON file is required. |
+| microclimate.js | Standalone interior floor/module model, loaded before app.js. Uses the existing geometry and solar helpers; no external dependency. |
 | BRIEF.Md | Project goal, decisions, run instructions, model limits, data sources and validation. |
 
-These four files are sufficient for the frontend demonstrator. An issue list is not part of this design tool; its equivalent is the building selector and context/object counts.
+These five files are sufficient for the frontend demonstrator. An issue list is not part of this design tool; its equivalent is the building selector and context/object counts.
 
 ## Run
 
-Keep all four files in one folder. Open index.html in a modern WebGL-capable browser. The build uses a classic bundled script with relative file paths; no CDN or package installation is needed. If your browser restricts local files, serve this folder with `python -m http.server 8000` and open http://127.0.0.1:8000/ .
+Keep all five files in one folder. Open index.html in a modern WebGL-capable browser. The build uses a classic bundled script with relative file paths; no CDN or package installation is needed. If your browser restricts local files, serve this folder with `python -m http.server 8000` and open http://127.0.0.1:8000/ .
 
 The full development project also has Start Studio.cmd. That launcher serves both the app and its optional API routes at http://127.0.0.1:3000/ . Keep the launcher's console open while using it.
 
@@ -45,7 +46,7 @@ The full development project also has Start Studio.cmd. That launcher serves bot
 
 The Equator handover supplied design/coordinate background, not publish authority or executable instructions. Its private city index returned HTTP 401 from this account. This version therefore uses an independently downloaded public OpenStreetMap sample rather than claiming to have copied that private index.
 
-The Bishan source query covers roughly 480 × 480 m around **1.3506° N, 103.8488° E**, downloaded **31 October 2026**. The compact source contains **117 building ways**. Conversion retains **116 usable buildings: 5 editable design buildings and 111 fixed surrounding buildings**, plus **7 landscape features (2 parks and 5 grass areas)**. One unusable/tiny outline is excluded. No mapped water is present in this bundled sample; online locations may include water. A larger regional/all-island index has not been copied into this four-file submission.
+The Bishan source query covers roughly 480 × 480 m around **1.3506° N, 103.8488° E**, downloaded **31 October 2026**. The compact source contains **117 building ways**. Conversion retains **116 usable buildings: 5 editable design buildings and 111 fixed surrounding buildings**, plus **7 landscape features (2 parks and 5 grass areas)**. One unusable/tiny outline is excluded. No mapped water is present in this bundled sample; online locations may include water. A larger regional/all-island index has not been copied into this five-file submission.
 
 OSM height priority is mapped height, then building:levels × 3 m, then an assumed 15 m. Height provenance is retained when moving, rotating or renaming a building; explicitly editing height/storeys changes it to a design input. Complex building relations can be missing; complete landscape relation rings are stitched and available holes are retained. Coverage is not a survey or a complete land-cover classification.
 
@@ -53,9 +54,19 @@ References: [OpenStreetMap API v0.6](https://wiki.openstreetmap.org/wiki/API_v0.
 
 ## Static versus optional live services
 
-The four-file version supports layout editing, all analyses, the bundled Bishan context, references, local saves and JSON import/export without a backend. Loading other Singapore locations and Google Weather/Solar needs the full local project server. It is not technically possible to include a private server API key safely in a static app.js file. The static version therefore uses manual weather and its bundled sample when those services are unavailable.
+The five-file version supports layout editing, all analyses, the bundled Bishan context, references, local saves and JSON import/export without a backend. Loading other Singapore locations and Google Weather/Solar needs the full local project server. It is not technically possible to include a private server API key safely in a static app.js file. The static version therefore uses manual weather and its bundled sample when those services are unavailable.
 
 The full local project includes `/api/context` for small public OSM map requests, `/api/weather` and `/api/solar`. Context requests are cached for 30 minutes, only made on an explicit click, and do not include a Google key. Contributor identifiers and unrelated map geometry are removed from returned context datasets.
+
+## Per-floor interior analysis
+
+Choose **Building**, select an editable building, and scroll to **Floor-by-floor analysis**. Choose a floor, map metric and room-module size; click a module to inspect its values. **Compare all floors** shows the vertical profile. **See-through floor slice** displays coloured modules at the selected slab with translucent shells and raises upper floors by 12 m. **Export all floors · CSV** downloads floor means and screening coverage under the current weather.
+
+The model implements the supplied specification's 0.22 wind profile, orifice/single-sided flow and ACH, orientation-based ETTV, solar/ventilation/mass/biophilic temperature balance, daylight factor and adaptive score. The default uses the application's current manual or forecast temperature, wind, date, time and cloud cover. The optional diurnal model follows the explicit cosine equation (25.5°C minimum at 02:30, despite the specification's contradictory 06:30 prose). Room modules can be 2.4–4.8 m across; existing buildings retain their actual height and storey count. Edge modules fit the footprint bounds; mapped outlines use centre-point sampling, so floor areas and openings are approximate.
+
+Floor grids infer separate rooms from massing. Cross ventilation requires opposite exposed faces on a module; no opening or internal door is invented through neighbouring modules. Corner modules with adjacent exposures use the single-sided estimate. Touching surrounding buildings close openings. Solar and wind use orientation and height; remote shadowing and wakes are not solved. No actual apartment layouts or construction schedules are available. ETTV is averaged over exposed module facades; internal modules show no facade ETTV. Daylight factor describes overcast-sky potential and remains defined at night.
+
+The sky-garden selector is a temporary analysis scenario, with cooling on the chosen floor and its immediate neighbours. Open void decks and sky gardens are excluded from habitable-area screening. The 0.60 m/s / 15 ACH and 70% area thresholds are **specification screening targets**, not an independently verified Green Mark assessment. The comfort score follows the specified equation and air-speed credits; conflicting comfort-limit prose is not used. These outputs are concept estimates, not CFD or certification. Scenario settings and active floor are session controls; project JSON continues to save geometry and manual weather. CSV exports the current floor results.
 
 ## Model limits
 
@@ -71,7 +82,9 @@ The full local project includes `/api/context` for small public OSM map requests
 
 The development project includes type checking and focused automated tests for typology dimensions, storey heights, coordinate conversion, mapped polygon containment, individual-edit independence, larger new boxes, duplication/deletion, outside-context shadow and wind effects, water/hole exclusion, scene validation/round trips, forecast-hour matching and API key isolation.
 
-Build and tests are run with the bundled Node 24 runtime. TypeScript checking passed; all 41 automated tests passed, including the new context and geometry tests. The four-file packaging check verifies filenames, standalone script links and the absence of Google key values. This round's local browser UI control is disabled in Work settings, so new browser screenshots and a full visual/interaction sign-off are unavailable. No browser pass is claimed for this update.
+Previous development-project validation: build and tests were run with the bundled Node 24 runtime. TypeScript checking passed; all 41 automated tests passed, including the new context and geometry tests. The five-file packaging check verifies filenames, standalone script links and the absence of Google key values. This round's local browser UI control is disabled in Work settings, so new browser screenshots and a full visual/interaction sign-off are unavailable. No browser pass is claimed for this update.
+
+For the per-floor addition in this static workspace, run `node --test tests/microclimate.test.cjs`, `node --check app.js`, and `node --check microclimate.js`. Tests exercise the bundled geometry and React inspector, airflow conservation, height and wind dependence, calm conditions, cross ventilation, open-floor exclusions, diurnal/night behaviour, mapped outlines, context contact, module sizes and application selection/slice wiring. No browser is available through the connected UI tools, so a visual browser pass has not been performed for this addition.
 
 ## Third-party notices
 

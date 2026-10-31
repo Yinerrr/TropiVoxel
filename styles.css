@@ -4639,3 +4639,25 @@ input[type="date"], input[type="number"] {
   syntax: "*";
   inherits: false
 }
+
+/* Interior floor analysis follows the building editor's compact controls. */
+.floor-microclimate { margin: 16px 18px; padding-top: 20px; border-top: 1px solid #d9d9ce; }
+.floor-microclimate h2 { font-size: 18px; margin: 7px 0; }
+.floor-microclimate > label { display: grid; gap: 6px; margin: 12px 0; font-size: 12px; }
+.floor-microclimate select { width: 100%; padding: 8px; border: 1px solid #d5d9d0; border-radius: 6px; background: #fafaf6; color: #344b42; font: inherit; }
+.floor-microclimate .micro-check { display: flex; align-items: center; }
+.micro-floor-map { display: grid; gap: 2px; width: 100%; max-height: 340px; margin: 12px 0; background: #eeeee6; padding: 5px; }
+.micro-floor-map button { min-width: 0; min-height: 0; border: 1px solid #ffffff70; padding: 0; cursor: pointer; }
+.micro-floor-map button.active, .micro-floor-map button:focus-visible { outline: 2px solid #213e36; outline-offset: 0; z-index: 1; }
+.micro-legend { font-size: 10px; }
+.micro-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 15px 0; }
+.micro-stats dt { font-size: 11px; color: #68776d; }
+.micro-stats dd { margin: 4px 0 0; font-size: 20px; font-weight: 600; }
+.micro-stats small { font-size: 11px; font-weight: 400; }
+.micro-target { font-size: 12px; line-height: 1.6; padding: 10px; background: #e9eee5; border-radius: 6px; }
+.floor-microclimate details { margin: 14px 0; font-size: 12px; }
+.floor-microclimate summary { cursor: pointer; }
+.micro-floor-list { max-height: 260px; overflow: auto; margin-top: 10px; }
+.micro-floor-list button { display: grid; grid-template-columns: 30px 1fr 45px; align-items: center; gap: 6px; width: 100%; border: 0; background: transparent; padding: 6px; font: inherit; cursor: pointer; text-align: left; }
+.micro-floor-list button.active { background: #e0e8dd; border-radius: 4px; }
+.micro-bar { display: block; height: 9px; border-radius: 3px; }
